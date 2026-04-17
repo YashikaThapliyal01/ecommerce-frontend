@@ -193,6 +193,8 @@ function App() {
   const [search, setSearch] = useState("");
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [activeView, setActiveView] = useState("products");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(9);
   const { categoryName } = useParams();
   const navigate = useNavigate();
   const minPrice = 500;
@@ -230,14 +232,14 @@ function App() {
   };
 
   const categories = useMemo(
-    () => ["All", ...new Set(products.map((product) => product.category))],
+    () => ["Home", ...new Set(products.map((product) => product.category).filter(cat => cat !== "Home"))],
     [products]
   );
 
   const activeCategory = useMemo(() => {
-    if (!categoryName) return "All";
+    if (!categoryName) return "Home";
     const decodedCategory = decodeURIComponent(categoryName);
-    return categories.includes(decodedCategory) ? decodedCategory : "All";
+    return categories.includes(decodedCategory) ? decodedCategory : "Home";
   }, [categories, categoryName]);
 
   const filteredProducts = useMemo(() => {
@@ -247,15 +249,39 @@ function App() {
           product.name.toLowerCase().includes(search.toLowerCase()) ||
           product.description.toLowerCase().includes(search.toLowerCase());
         const matchesCategory =
-          activeCategory === "All" || product.category === activeCategory;
+          activeCategory === "Home" || product.category === activeCategory;
         const matchesPrice =
           product.price >= minPrice && product.price <= selectedMaxPrice;
         return matchesSearch && matchesCategory && matchesPrice;
       });
   }, [activeCategory, products, search, selectedMaxPrice]);
 
+  const totalProducts = filteredProducts.length;
+  const totalPages = Math.ceil(totalProducts / itemsPerPage);
+  
+  const paginatedProducts = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filteredProducts.slice(startIndex, endIndex);
+  }, [filteredProducts, currentPage, itemsPerPage]);
+
   const totalCartValue = cart.reduce((acc, item) => acc + item.price, 0);
   const selectedCategoryCount = filteredProducts.length;
+
+  const handleItemsPerPageChange = (newItemsPerPage) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1);
+  };
+
+  const handleSearchChange = (value) => {
+    setSearch(value);
+    setCurrentPage(1);
+  };
+
+  const handleMaxPriceChange = (value) => {
+    setSelectedMaxPrice(Number(value));
+    setCurrentPage(1);
+  };
 
   const placeCartOrder = () => {
     if (cart.length === 0) return;
@@ -272,8 +298,9 @@ function App() {
         categories={categories}
         activeCategory={activeCategory}
         onCategoryChange={(category) => {
+          setCurrentPage(1);
           setActiveView("products");
-          navigate(category === "All" ? "/" : `/category/${encodeURIComponent(category)}`);
+          navigate(category === "Home" ? "/" : `/category/${encodeURIComponent(category)}`);
         }}
         isDarkMode={isDarkMode}
         onThemeToggle={() => setIsDarkMode((prev) => !prev)}
@@ -295,7 +322,7 @@ function App() {
           className="form-control mb-3 search-input"
           placeholder="Search products..."
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => handleSearchChange(e.target.value)}
         />
 
         <div className="row g-2 mb-3">
@@ -313,7 +340,7 @@ function App() {
                 max={maxLimitPrice}
                 step={500}
                 value={selectedMaxPrice}
-                onChange={(e) => setSelectedMaxPrice(Number(e.target.value))}
+                onChange={(e) => handleMaxPriceChange(e.target.value)}
               />
             </div>
           </div>
@@ -384,14 +411,66 @@ function App() {
 
         {activeView === "products" && (
           <>
+            <div className="row mb-3">
+              <div className="col-md-12">
+                <div className="items-per-page-wrapper">
+                  <label htmlFor="items-per-page">Items per page:</label>
+                  <select
+                    id="items-per-page"
+                    className="page-size-select"
+                    value={itemsPerPage}
+                    onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
+                  >
+                    <option value={3}>3</option>
+                    <option value={6}>6</option>
+                    <option value={9}>9</option>
+                    <option value={12}>12</option>
+                    <option value={15}>15</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
             <ProductList
-              products={filteredProducts}
+              products={paginatedProducts}
               addToCart={addToCart}
               addToWishlist={addToWishlist}
               buyNow={buyNow}
             />
+
+            <div className="pagination-controls">
+              <div className="pagination-info">
+                Showing {paginatedProducts.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} - {Math.min(currentPage * itemsPerPage, totalProducts)} of {totalProducts} products
+              </div>
+              <div className="pagination-buttons">
+                <button
+                  className="pagination-btn"
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                >
+                  Previous
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                  <button
+                    key={page}
+                    className={`pagination-btn ${currentPage === page ? 'active' : ''}`}
+                    onClick={() => setCurrentPage(page)}
+                  >
+                    {page}
+                  </button>
+                ))}
+                <button
+                  className="pagination-btn"
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages || totalPages === 0}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+
             <div className="text-muted small mt-2">
-              Showing {selectedCategoryCount} product(s)
+              Total: {selectedCategoryCount} product(s)
             </div>
           </>
         )}
